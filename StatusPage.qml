@@ -259,7 +259,7 @@ Column {
             property bool copied: false
             anchors.right: parent.right
             anchors.rightMargin: page.rowPadding
-            y: Math.max(0, page.rowPadding + (time.height - height) / 2)
+            anchors.verticalCenter: parent.verticalCenter
             horizontalPadding: Style.space(4)
             verticalPadding: Style.space(2)
             iconText: copied ? "󰄬" : "󰆏"
