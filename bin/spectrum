@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Streams the default source's spectrum as one line of 0–1000 bar heights per
+# frame. cava supplies log-spaced bands, auto-gain, and smoothing.
+set -euo pipefail
+
+command -v cava >/dev/null || exit 127
+
+exec cava -p <(cat <<CONF
+[general]
+bars = ${1:-40}
+framerate = 30
+autosens = 1
+lower_cutoff_freq = 60
+higher_cutoff_freq = 8000
+
+[input]
+method = pipewire
+source = $(pactl get-default-source)
+
+[output]
+method = raw
+channels = mono
+raw_target = /dev/stdout
+data_format = ascii
+ascii_max_range = 1000
+bar_delimiter = 32
+frame_delimiter = 10
+
+[smoothing]
+monstercat = 1
+noise_reduction = 70
+CONF
+)

@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""hyprwhspr post_transcription_hook: LLM dictation cleanup, after MiniWhisper.
+
+Reads the raw transcript on stdin and prints the cleaned text. Printing
+nothing, or failing, makes hyprwhspr paste the raw transcript instead.
+"""
+
+import json
+import os
+import re
+import signal
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import panel_settings
+
+WRAPPERS = [
+    re.compile(r"^<(think|thinking|reasoning)>.*?</\1>\s*(.*)$", re.DOTALL),
+    re.compile(r"^<(TRANSCRIPT|output|transcript)>\s*(.*?)\s*</\1>$", re.DOTALL),
+    re.compile(r"^```[\w-]*\n(.*?)\n```$", re.DOTALL),
+    re.compile(r'^"(.*)"$', re.DOTALL),
+]
+LOG_KEEP = 500
+RECENT_KEEP = 3
+# Output tokens or characters allowed per transcript character.
+OUTPUT_RATIO = 4
+
+
+def peel(text: str) -> str:
+    for _ in range(4):
+        for wrapper in WRAPPERS:
+            match = wrapper.match(text)
+            if match:
+                text = match.group(match.lastindex).strip()
+                break
+        else:
+            return text
+    return text
+
+
+def instructions(prompt: str) -> str:
+    system = panel_settings.system_prompt()
+    if prompt.strip():
+        system += f"\n\nAdditional rules from the speaker:\n{prompt.strip()}"
+    return system
+
+
+def open_post(url: str, headers: dict, body: dict, timeout: float):
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        # Cloudflare's browser-integrity check rejects Python's default agent.
+        headers={
+            **headers,
+            "content-type": "application/json",
+            "user-agent": "hyprwhspr-cleanup",
+        },
+    )
+    try:
+        return urllib.request.urlopen(request, timeout=timeout)
+    except urllib.error.HTTPError as error:
+        sys.exit(
+            f"cleanup: HTTP {error.code}: {error.read().decode(errors='replace')[:300]}"
+        )
+
+
+def anthropic_stream(response) -> tuple[str, str]:
+    """Some proxies only serve the Messages API streamed, so always stream."""
+    text, stop_reason = [], None
+    for line in response:
+        if not line.startswith(b"data:"):
+            continue
+        event = json.loads(line[5:])
+        if (
+            event["type"] == "content_block_delta"
+            and event["delta"]["type"] == "text_delta"
+        ):
+            text.append(event["delta"]["text"])
+        elif event["type"] == "message_delta":
+            stop_reason = event["delta"]["stop_reason"]
+        elif event["type"] == "error":
+            sys.exit(f"cleanup: {event['error']['message']}")
+    return "".join(text), stop_reason
+
+
+def responses_text(body: dict) -> str:
+    if body["status"] != "completed":
+        sys.exit(
+            f"cleanup: response {body['status']}: {body.get('incomplete_details')}"
+        )
+    return "".join(
+        part["text"]
+        for item in body["output"]
+        if item["type"] == "message"
+        for part in item["content"]
+        if part["type"] == "output_text"
+    )
+
+
+def clean(transcript: str, cleanup: dict) -> str:
+    provider = panel_settings.providers()[cleanup["provider"]]
+    headers = panel_settings.auth_headers(cleanup["provider"], provider)
+    system = instructions(cleanup.get("prompt", ""))
+    user = f"<TRANSCRIPT>\n{transcript}\n</TRANSCRIPT>"
+    # An empty tag would claim the speaker has a dictionary that is blank.
+    if words := panel_settings.vocabulary():
+        terms = "\n".join(f"- {word}" for word in words)
+        user += f"\n\n<DICTIONARY>\n{terms}\n</DICTIONARY>"
+    # Reasoning tokens count against this budget too.
+    budget = OUTPUT_RATIO * len(transcript) + 1000
+    effort = cleanup.get("effort")
+
+    if provider["protocol"] == "responses":
+        with open_post(
+            f"{provider['base_url']}/responses",
+            headers,
+            {
+                "model": cleanup["model"],
+                "instructions": system,
+                "input": user,
+                "max_output_tokens": budget,
+                "store": False,
+                **({"reasoning": {"effort": effort}} if effort else {}),
+            },
+            cleanup["timeout"],
+        ) as response:
+            text = responses_text(json.load(response))
+    elif provider["protocol"] == "messages":
+        with open_post(
+            f"{provider['base_url']}/messages",
+            headers,
+            {
+                "model": cleanup["model"],
+                "max_tokens": budget,
+                "stream": True,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+            cleanup["timeout"],
+        ) as response:
+            text, stop_reason = anthropic_stream(response)
+        if stop_reason != "end_turn":
+            sys.exit(f"cleanup: stopped with {stop_reason}")
+    else:
+        with open_post(
+            f"{provider['base_url']}/chat/completions",
+            headers,
+            {
+                "model": cleanup["model"],
+                "max_completion_tokens": budget,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                # Unset means the model's default; non-reasoning models reject the field.
+                **({"reasoning_effort": effort} if effort else {}),
+            },
+            cleanup["timeout"],
+        ) as response:
+            choice = json.load(response)["choices"][0]
+        if choice["finish_reason"] != "stop":
+            sys.exit(f"cleanup: finished with {choice['finish_reason']}")
+        text = choice["message"]["content"]
+
+    cleaned = peel(text.strip())
+    if not cleaned:
+        sys.exit("cleanup: empty response")
+    if len(cleaned) > OUTPUT_RATIO * len(transcript) + 200:
+        sys.exit("cleanup: response far longer than the transcript")
+    return cleaned
+
+
+def record(entry: dict) -> None:
+    log = panel_settings.CLEANUP_LOG
+    log.parent.mkdir(parents=True, exist_ok=True)
+    lines = log.read_text().splitlines() if log.exists() else []
+    lines = [*lines[-(LOG_KEEP - 1) :], json.dumps(entry)]
+    log.write_text("\n".join(lines) + "\n")
+
+
+def remember(text: str) -> None:
+    """Keep the last few pasted transcripts for the panel's RECENT list."""
+    path = panel_settings.RECENT
+    recent = json.loads(path.read_text()) if path.exists() else []
+    recent = [{"ts": time.time(), "text": text}, *recent][:RECENT_KEEP]
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as file:
+        json.dump(recent, file)
+
+
+def timed_out(signum, frame):
+    raise TimeoutError("timed out")
+
+
+def main() -> None:
+    transcript = sys.stdin.read().strip()
+    cleanup = panel_settings.settings().get("cleanup", {})
+    if not cleanup.get("enabled") or not cleanup.get("model"):
+        remember(transcript)
+        return
+    # urlopen's timeout is per socket read and hyprwhspr SIGKILLs the hook at
+    # 5 s, so bound the whole run here, where the failure can still be logged.
+    signal.signal(signal.SIGALRM, timed_out)
+    signal.setitimer(signal.ITIMER_REAL, cleanup["timeout"])
+    started = time.time()
+    entry = {
+        "ts": started,
+        "provider": cleanup["provider"],
+        "model": cleanup["model"],
+        "chars_in": len(transcript),
+    }
+    try:
+        cleaned = clean(transcript, cleanup)
+    except BaseException as error:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        # hyprwhspr pastes the uncleaned transcript when the hook fails.
+        remember(transcript)
+        record(
+            {
+                **entry,
+                "seconds": round(time.time() - started, 3),
+                "error": str(error) or type(error).__name__,
+            }
+        )
+        raise
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    record(
+        {**entry, "seconds": round(time.time() - started, 3), "chars_out": len(cleaned)}
+    )
+    remember(cleaned)
+    print(cleaned)
+
+
+main()

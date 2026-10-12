@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Prints a cleanup provider's model ids as a JSON array."""
+
+import json
+import sys
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import panel_settings
+
+provider_id = sys.argv[1]
+provider = panel_settings.providers()[provider_id]
+request = urllib.request.Request(
+    f"{provider['base_url']}/models?limit=1000",
+    headers={
+        **panel_settings.auth_headers(provider_id, provider),
+        "user-agent": "hyprwhspr-panel",
+    },
+)
+with urllib.request.urlopen(request, timeout=5) as response:
+    print(json.dumps(sorted(model["id"] for model in json.load(response)["data"])))

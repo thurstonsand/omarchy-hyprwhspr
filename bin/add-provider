@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Detects a custom cleanup provider's API and prints its provider entry.
+
+    add-provider <id>
+
+Reads HYPRWHSPR_URL, then HYPRWHSPR_KEY (a pasted key) or HYPRWHSPR_KEY_ENV
+(a variable in the hyprwhspr service environment), and HYPRWHSPR_PROTOCOL
+(empty to detect). A pasted key is saved privately under the provider's id.
+"""
+
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import panel_settings
+
+ENDPOINT_SUFFIXES = ("/models", "/chat/completions", "/responses", "/messages")
+# Preferred first: Anthropic also serves an OpenAI-compatible chat route.
+PROTOCOL_ROUTES = {
+    "responses": "responses",
+    "messages": "messages",
+    "chat": "chat/completions",
+}
+
+
+def call(url: str, headers: dict, body: dict | None = None) -> int:
+    request = urllib.request.Request(
+        url,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={
+            **headers,
+            "content-type": "application/json",
+            "user-agent": "hyprwhspr-panel",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status
+    except urllib.error.HTTPError as error:
+        return error.code
+    except urllib.error.URLError as error:
+        sys.exit(f"cannot reach {url}: {error.reason}")
+
+
+def candidates(url: str) -> list[str]:
+    url = url.strip().rstrip("/")
+    for suffix in ENDPOINT_SUFFIXES:
+        url = url.removesuffix(suffix)
+    if re.search(r"/v\d+$", url):
+        return [url]
+    return [url, f"{url}/v1"]
+
+
+def find_models(url: str, key: str) -> tuple[str, str]:
+    """The base URL and auth style that list models."""
+    statuses = []
+    for base in candidates(url):
+        for auth in ("bearer", "x-api-key") if key else ("bearer",):
+            headers = {"anthropic-version": "2023-06-01"}
+            if key:
+                headers |= panel_settings.key_header(auth, key)
+            status = call(f"{base}/models", headers)
+            if status == 200:
+                return base, auth
+            statuses.append(status)
+    if 401 in statuses or 403 in statuses:
+        sys.exit("the key was rejected")
+    sys.exit(f"no model list at {url} (HTTP {statuses[-1]})")
+
+
+def detect_protocol(base: str, headers: dict) -> str:
+    # An empty body is a 400 where the route exists and a 404 where it doesn't.
+    for protocol, route in PROTOCOL_ROUTES.items():
+        if call(f"{base}/{route}", headers, {}) not in (404, 405):
+            return protocol
+    sys.exit("found models, but no responses, messages, or chat route")
+
+
+def main() -> None:
+    provider_id = sys.argv[1]
+    key_env = os.environ.get("HYPRWHSPR_KEY_ENV", "")
+    key = (
+        panel_settings.api_key(key_env)
+        if key_env
+        else os.environ.get("HYPRWHSPR_KEY", "").strip()
+    )
+
+    base, auth = find_models(os.environ["HYPRWHSPR_URL"], key)
+    headers = {"anthropic-version": "2023-06-01"}
+    if key:
+        headers |= panel_settings.key_header(auth, key)
+    protocol = os.environ.get("HYPRWHSPR_PROTOCOL") or detect_protocol(base, headers)
+
+    entry = {"protocol": protocol, "auth": auth, "base_url": base}
+    if key_env:
+        entry["key_env"] = key_env
+    elif key:
+        path = panel_settings.key_file(provider_id)
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.touch(mode=0o600)
+        path.write_text(key + "\n")
+    print(json.dumps(entry))
+
+
+main()

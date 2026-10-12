@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "thurstonsand.hyprwhspr",
+  "name": "hyprwhspr",
+  "version": "0.1.0",
+  "author": "Thurston Sandberg",
+  "license": "MIT",
+  "description": "Status, mic check, model switching, and transcript cleanup rules for hyprwhspr dictation.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "hyprwhspr",
+    "description": "Dictation status, mic check, model and cleanup settings",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

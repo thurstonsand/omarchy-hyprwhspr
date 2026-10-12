@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Streams one microphone level per 50 ms on the default source, on the
+# daemon's display scale: RMS × 10, clamped to 1.
+exec pw-record --rate 16000 --channels 1 --format s16 --latency 50ms - \
+  | od -An -v -t d2 -w1600 \
+  | awk '{ s = 0; for (i = 1; i <= NF; i++) s += $i * $i; l = sqrt(s / NF) / 32768 * 10; printf "%.4f\n", (l > 1 ? 1 : l); fflush() }'

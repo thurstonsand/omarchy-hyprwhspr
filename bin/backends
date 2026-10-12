@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Prints {backend: {installed, size}} for the local backends the panel offers:
+# whether hyprwhspr's venv can import it, and the downloaded model size.
+#   backends remove <id>   deletes that backend's downloaded models
+set -euo pipefail
+
+python="${XDG_DATA_HOME:-$HOME/.local/share}/hyprwhspr/venv/bin/python"
+hub="${HF_HOME:-$HOME/.cache/huggingface}/hub"
+
+declare -A models=(
+  [cohere-transcribe]='models--CohereLabs--cohere-transcribe-*'
+  [onnx-asr]='models--istupakov--parakeet-*'
+  [faster-whisper]='models--Systran--faster-whisper-*'
+)
+declare -A modules=(
+  [cohere-transcribe]='transformers torch'
+  [onnx-asr]='onnx_asr'
+  [faster-whisper]='faster_whisper'
+)
+
+model_dirs() {
+  compgen -G "$hub/${models[$1]}" || true
+}
+
+installed() {
+  [[ -x "$python" ]] && "$python" -c "import importlib.util, sys; sys.exit(not all(importlib.util.find_spec(m) for m in sys.argv[1:]))" "$@"
+}
+
+size() {
+  local dirs
+  mapfile -t dirs < <(model_dirs "$1")
+  ((${#dirs[@]})) || return 0
+  du -scbL "${dirs[@]}" | tail -1 | cut -f1
+}
+
+entry() {
+  local ok=false
+  # shellcheck disable=SC2086 # the module list splits into arguments
+  installed ${modules[$1]} && ok=true
+  jq -n --arg id "$1" --argjson installed "$ok" --arg size "$(size "$1")" \
+    '{($id): {installed: $installed, size: ($size | tonumber? // 0)}}'
+}
+
+if [[ "${1:-}" == remove ]]; then
+  [[ -v "models[$2]" ]] || { echo "unknown backend: $2" >&2; exit 1; }
+  model_dirs "$2" | xargs -r -d '\n' rm -rf --
+  exit
+fi
+
+for id in "${!models[@]}"; do entry "$id"; done | jq -s 'add'

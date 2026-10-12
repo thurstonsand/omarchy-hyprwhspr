@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Prints one JSON object describing the hyprwhspr service for the panel.
+set -euo pipefail
+
+state="$(systemctl --user is-active hyprwhspr || true)"
+pid="$(systemctl --user show hyprwhspr -p MainPID --value)"
+service_bytes="$(systemctl --user show hyprwhspr -p MemoryCurrent --value)"
+[[ "$service_bytes" =~ ^[0-9]+$ ]] || service_bytes=0
+
+gpu_kib=0
+if [[ "$pid" != 0 && -d "/proc/$pid/fdinfo" ]]; then
+  gpu_kib="$(grep -h '^drm-resident-gtt:' "/proc/$pid/fdinfo/"* 2>/dev/null | awk '{s += $2} END {print s + 0}')"
+fi
+
+read -r total_kib available_kib < <(awk '/^MemTotal:/ {t = $2} /^MemAvailable:/ {a = $2} END {print t, a}' /proc/meminfo)
+unloaded=false
+[[ -e "$XDG_RUNTIME_DIR/hyprwhspr/model_unloaded" ]] && unloaded=true
+version="$(pacman -Q hyprwhspr 2>/dev/null | awk '{print $2}' | cut -d- -f1)"
+mic="$(wpctl inspect @DEFAULT_AUDIO_SOURCE@ 2>/dev/null | sed -n 's/.*node.description = "\(.*\)"/\1/p')"
+
+jq -n \
+  --arg state "$state" --argjson unloaded "$unloaded" --arg version "$version" --arg mic "$mic" \
+  --argjson service "$service_bytes" --argjson gpu "$((gpu_kib * 1024))" \
+  --argjson total "$((total_kib * 1024))" --argjson available "$((available_kib * 1024))" \
+  '{state: $state, unloaded: $unloaded, version: $version, mic: $mic,
+    memory: {service: $service, gpu: $gpu, total: $total, available: $available}}'

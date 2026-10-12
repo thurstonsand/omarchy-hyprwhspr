@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Prints today's dictation count from the service journal.
+set -euo pipefail
+
+count="$(journalctl --user -u hyprwhspr --since today -o cat | grep -c 'Injection dispatched' || true)"
+jq -n --argjson dictations "$count" '{dictations: $dictations}'
