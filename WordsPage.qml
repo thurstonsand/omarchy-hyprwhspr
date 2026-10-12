@@ -14,11 +14,8 @@ Item {
   }).sort(function(a, b) {
     return a.word.toLowerCase().localeCompare(b.word.toLowerCase()) || a.misheard.localeCompare(b.misheard)
   })
-  readonly property int corrections: entries.filter(function(e) { return e.misheard !== "" }).length
-  readonly property bool shown: panel.opened && panel.tab === "words"
+  readonly property bool shown: panel.opened && panel.tab === "vocab"
   readonly property Item focusItem: form.input
-
-  function plural(n, noun) { return n + " " + noun + (n === 1 ? "" : "s") }
 
   onShownChanged: if (shown) Qt.callLater(form.focusWord)
 
@@ -37,13 +34,6 @@ Item {
         if (word === "" && misheard === "") page.panel.close()
         else reset()
       }
-    }
-
-    Text {
-      text: page.plural(page.entries.length - page.corrections, "word") + " · " + page.plural(page.corrections, "correction")
-      color: page.panel.dim
-      font.family: page.panel.fontFamily
-      font.pixelSize: Style.font.caption
     }
 
     PanelSeparator { width: parent.width }
@@ -73,7 +63,7 @@ Item {
       required property var modelData
       width: ListView.view.width
       height: Style.spacing.popupRowHeight
-      color: hover.containsMouse || form.editingKey === modelData.key
+      color: hover.containsMouse || trash.hot || form.editingKey === modelData.key
         ? Style.hoverFillFor(page.panel.fg, Color.accent) : "transparent"
 
       MouseArea {

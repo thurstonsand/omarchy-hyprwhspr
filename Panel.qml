@@ -136,7 +136,11 @@ Panel {
     }
     if (wordsPending) next.word_overrides = orderedWords(stagedWords)
     stagedWords = null
-    configFile.setText(JSON.stringify(next, null, 2) + "\n")
+    // setText fires no onLoaded for the panel's own write, so read it back
+    // here; otherwise the next apply writes the old config over this one.
+    var text = JSON.stringify(next, null, 2) + "\n"
+    configFile.setText(text)
+    readConfig(text)
     waking = true
     Quickshell.execDetached(["systemctl", "--user", "restart", "hyprwhspr"])
   }
@@ -269,7 +273,7 @@ Panel {
   IpcHandler {
     target: "hyprwhspr"
 
-    function show(name: string): void {
+    function open(name: string): void {
       root.selectTab(name)
       root.open()
     }
@@ -420,7 +424,7 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    focusTarget: root.tab === "words" ? wordsPage.focusItem : keyCatcher
+    focusTarget: root.tab === "vocab" ? wordsPage.focusItem : keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(480))
     contentHeight: panel.fittedContentHeight(content.implicitHeight + content.anchors.margins * 2)
 
@@ -505,7 +509,7 @@ Panel {
           options: [
             { value: "status", label: "STATUS" },
             { value: "model", label: "MODEL" + (root.pendingKeys.length ? " •" : "") },
-            { value: "words", label: "WORDS" + (root.wordsPending ? " •" : "") },
+            { value: "vocab", label: "VOCAB" + (root.wordsPending ? " •" : "") },
             { value: "cleanup", label: "CLEANUP" }
           ]
           onChanged: function(value) { root.selectTab(value) }
@@ -539,7 +543,7 @@ Panel {
             width: parent.width
             height: parent.height
             panel: root
-            opacity: root.tab === "words" ? 1 : 0
+            opacity: root.tab === "vocab" ? 1 : 0
             enabled: opacity === 1
           }
 

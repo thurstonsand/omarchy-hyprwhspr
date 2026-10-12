@@ -2,9 +2,9 @@
 
 An [Omarchy](https://omarchy.org) bar widget and panel for [hyprwhspr](https://github.com/goodroot/hyprwhspr) dictation: a live mic check, the last few transcripts, model switching, vocabulary, and LLM cleanup of what you said before it gets typed.
 
-| Status | Model | Words | Cleanup |
+| Status | Model | Vocab | Cleanup |
 | --- | --- | --- | --- |
-| ![Status](screenshots/status.png) | ![Model](screenshots/model.png) | ![Words](screenshots/words.png) | ![Cleanup](screenshots/cleanup.png) |
+| ![Status](screenshots/status.png) | ![Model](screenshots/model.png) | ![Vocab](screenshots/vocab.png) | ![Cleanup](screenshots/cleanup.png) |
 
 ## Prerequisites
 
@@ -38,14 +38,14 @@ The widget sits on the bar as a microphone. It stays dim while the model is unlo
 
 - **Mic check.** A live spectrum of the default input, running whenever the panel is open, whether or not hyprwhspr is recording. If the bars move when you talk, hyprwhspr can hear you.
 - **Memory.** What the service and its GPU allocations are holding.
-- **Recent.** The last three transcripts, each with a copy button, for when a paste lands in the wrong window. Click a row to expand it. Select text in an expanded row to teach a word (see Words). These live in `$XDG_RUNTIME_DIR` and are gone at logout.
+- **Recent.** The last three transcripts, each with a copy button, for when a paste lands in the wrong window. Long transcripts scroll within their row. Select text in a row to teach a word (see Vocab). These live in `$XDG_RUNTIME_DIR` and are gone at logout.
 - **Power.** The button beside the title loads or unloads the model, and pulses while it wakes. Right-click it to set the auto-hibernate timer.
 
 ### Model
 
 Pick the transcription backend, device, recording mode, and language. hyprwhspr only reads its config at startup, so changes are applied with one service restart, either from **Apply now** or automatically when you leave the tab or close the panel. Right-click a downloaded model to remove its files.
 
-### Words
+### Vocab
 
 Teach hyprwhspr uncommon words and proper nouns.
 

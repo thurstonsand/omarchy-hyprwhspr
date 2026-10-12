@@ -9,16 +9,7 @@ Column {
   required property var panel
   readonly property var status: panel.status
   readonly property var memory: status ? status.memory : null
-  // The RECENT row shown in full, or -1.
-  property int expanded: -1
   readonly property real rowPadding: Style.space(4)
-
-  function collapsedHeight(lines) { return lines * bodyMetrics.height + 2 * rowPadding }
-
-  Connections {
-    target: page.panel
-    function onRecentChanged() { page.expanded = -1 }
-  }
 
   FontMetrics {
     id: bodyMetrics
@@ -47,7 +38,7 @@ Column {
     Column {
       Text {
         text: page.status
-          ? page.panel.committed.backend + " · " + page.panel.committed.device
+          ? [page.panel.committed.backend, page.panel.committed.device].filter(Boolean).join(" · ")
           : "probing…"
         color: page.panel.fg
         font.family: page.panel.fontFamily
@@ -157,11 +148,13 @@ Column {
     fontFamily: page.panel.fontFamily
   }
 
-  // A fixed height, so expanding a transcript never resizes the panel.
+  // Rows never resize, so a click selects text where it lands; a long
+  // transcript scrolls inside its row.
   Item {
     id: recentBox
     width: parent.width
-    height: 3 * page.collapsedHeight(2) + 2 * recentList.spacing
+    height: 3 * entryHeight + 2 * recentList.spacing
+    readonly property real entryHeight: 2 * bodyMetrics.height + 2 * page.rowPadding
 
     Text {
       visible: page.panel.recent.length === 0
@@ -182,28 +175,16 @@ Column {
         Item {
           id: entry
           required property var modelData
-          required property int index
-          readonly property bool expanded: page.expanded === index
-          readonly property int others: page.panel.recent.length - 1
 
           width: recentList.width
-          height: expanded
-            ? Math.min(recentBox.height - others * (page.collapsedHeight(1) + recentList.spacing),
-                       body.contentHeight + 2 * page.rowPadding)
-            : page.collapsedHeight(page.expanded >= 0 ? 1 : 2)
+          height: recentBox.entryHeight
 
           Rectangle {
             anchors.fill: parent
-            color: entry.expanded || rowHover.containsMouse ? Style.hoverFillFor(page.panel.fg, Color.accent) : "transparent"
+            color: rowHover.hovered ? Style.hoverFillFor(page.panel.fg, Color.accent) : "transparent"
           }
 
-          MouseArea {
-            id: rowHover
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: entry.expanded ? Qt.ArrowCursor : Qt.PointingHandCursor
-            onClicked: page.expanded = entry.expanded ? -1 : entry.index
-          }
+          HoverHandler { id: rowHover }
 
           Text {
             id: time
@@ -215,22 +196,8 @@ Column {
             font.pixelSize: Style.font.body
           }
 
-          Text {
-            anchors.left: time.right
-            anchors.leftMargin: Style.space(10)
-            anchors.right: copy.left
-            y: page.rowPadding
-            visible: !entry.expanded
-            text: entry.modelData.text
-            wrapMode: Text.Wrap
-            maximumLineCount: page.expanded >= 0 ? 1 : 2
-            elide: Text.ElideRight
-            color: page.panel.fg
-            font.family: page.panel.fontFamily
-            font.pixelSize: Style.font.body
-          }
-
           Flickable {
+            id: scroller
             anchors.left: time.right
             anchors.leftMargin: Style.space(10)
             anchors.right: copy.left
@@ -238,10 +205,17 @@ Column {
             anchors.bottom: parent.bottom
             anchors.topMargin: page.rowPadding
             anchors.bottomMargin: page.rowPadding
-            visible: entry.expanded
             clip: true
+            interactive: false
             contentHeight: body.contentHeight
             boundsBehavior: Flickable.StopAtBounds
+
+            WheelHandler {
+              onWheel: function(event) {
+                scroller.contentY = Math.max(0, Math.min(scroller.contentHeight - scroller.height,
+                                                         scroller.contentY - event.angleDelta.y / 2))
+              }
+            }
 
             TextEdit {
               id: body
@@ -255,18 +229,29 @@ Column {
               selectedTextColor: page.panel.fg
               font.family: page.panel.fontFamily
               font.pixelSize: Style.font.body
+              onActiveFocusChanged: if (!activeFocus && !teach.opened) deselect()
 
               // Passive, so the TextEdit still makes the selection.
               PointHandler {
                 onActiveChanged: if (!active && body.selectedText.trim() !== "") teach.teach(body.selectedText.trim())
               }
             }
+          }
 
-            TeachPopup {
-              id: teach
-              panel: page.panel
-              onClosed: body.deselect()
-            }
+          TeachPopup {
+            id: teach
+            panel: page.panel
+            onClosed: body.deselect()
+          }
+
+          Text {
+            anchors.horizontalCenter: copy.horizontalCenter
+            anchors.bottom: scroller.bottom
+            visible: scroller.contentY + scroller.height < scroller.contentHeight - 1
+            text: "…"
+            color: page.panel.dim
+            font.family: page.panel.fontFamily
+            font.pixelSize: Style.font.body
           }
 
           Button {

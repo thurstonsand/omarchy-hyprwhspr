@@ -9,7 +9,7 @@ service_bytes="$(systemctl --user show hyprwhspr -p MemoryCurrent --value)"
 
 gpu_kib=0
 if [[ "$pid" != 0 && -d "/proc/$pid/fdinfo" ]]; then
-  gpu_kib="$(grep -h '^drm-resident-gtt:' "/proc/$pid/fdinfo/"* 2>/dev/null | awk '{s += $2} END {print s + 0}')"
+  gpu_kib="$(awk '/^drm-resident-gtt:/ {s += $2} END {print s + 0}' "/proc/$pid/fdinfo/"* 2>/dev/null || true)"
 fi
 
 read -r total_kib available_kib < <(awk '/^MemTotal:/ {t = $2} /^MemAvailable:/ {a = $2} END {print t, a}' /proc/meminfo)

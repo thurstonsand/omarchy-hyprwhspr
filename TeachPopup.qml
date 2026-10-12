@@ -13,8 +13,7 @@ Popup {
   property bool opensUp: false
 
   function teach(selection) {
-    form.load(selection, selection, "")
-    form.misheardOpen = true
+    form.load(selection, "", "")
     open()
   }
 
@@ -36,22 +35,10 @@ Popup {
     radius: Style.cornerRadius
   }
 
-  contentItem: Column {
-    spacing: Style.space(8)
-
-    WordForm {
-      id: form
-      width: parent.width
-      panel: popup.panel
-      onSubmitted: popup.close()
-      onCancelled: popup.close()
-    }
-
-    Text {
-      text: "same spelling saves a vocabulary word · ↵ add · esc cancel"
-      color: popup.panel.dim
-      font.family: popup.panel.fontFamily
-      font.pixelSize: Style.font.caption
-    }
+  contentItem: WordForm {
+    id: form
+    panel: popup.panel
+    onSubmitted: popup.close()
+    onCancelled: popup.close()
   }
 }

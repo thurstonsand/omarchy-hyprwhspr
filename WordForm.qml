@@ -2,14 +2,13 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// A word, and optionally what the model mishears it as. The same spelling
-// in both, ignoring case, is a plain vocabulary word.
+// A word, and optionally what the model mishears it as. Without a misheard
+// spelling it is a plain vocabulary word.
 Column {
   id: form
 
   required property var panel
   property string editingKey: ""
-  property bool misheardOpen: false
   readonly property Item input: wordField
   property alias word: wordField.text
   property alias misheard: misheardField.text
@@ -21,7 +20,6 @@ Column {
   function load(word, misheard, key) {
     wordField.text = word
     misheardField.text = misheard
-    misheardOpen = misheard !== ""
     editingKey = key
     focusWord()
   }
@@ -34,7 +32,6 @@ Column {
   function reset() {
     wordField.text = ""
     misheardField.text = ""
-    misheardOpen = false
     editingKey = ""
   }
 
@@ -87,27 +84,11 @@ Column {
     }
   }
 
-  Text {
-    text: (form.misheardOpen ? "󰅀" : "󰅂") + " misheard as" + (form.misheardOpen ? "" : "…")
-    color: form.panel.dim
-    font.family: form.panel.fontFamily
-    font.pixelSize: Style.font.caption
-
-    MouseArea {
-      anchors.fill: parent
-      cursorShape: Qt.PointingHandCursor
-      onClicked: {
-        form.misheardOpen = !form.misheardOpen
-        if (form.misheardOpen) misheardField.forceActiveFocus()
-      }
-    }
-  }
-
   TextField {
     id: misheardField
     width: wordField.width
-    visible: form.misheardOpen
-    placeholderText: "what it writes instead (optional)"
+    opacity: activeFocus || text !== "" ? 1 : 0.5
+    placeholderText: "misheard as (optional)"
     foreground: form.panel.fg
     font.family: form.panel.fontFamily
     onAccepted: form.submit()
