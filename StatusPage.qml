@@ -229,7 +229,7 @@ Column {
               selectedTextColor: page.panel.fg
               font.family: page.panel.fontFamily
               font.pixelSize: Style.font.body
-              onActiveFocusChanged: if (!activeFocus && !teach.opened) deselect()
+              onActiveFocusChanged: if (!activeFocus && !teach.visible) deselect()
 
               // Passive, so the TextEdit still makes the selection.
               PointHandler {
