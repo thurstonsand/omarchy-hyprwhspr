@@ -62,7 +62,7 @@ Send each transcript to an LLM that removes filler, applies spoken punctuation a
 
 Your prompt is added on top of a built-in system prompt. To change the built-in one, **open system prompt** copies it to `~/.config/hyprwhspr/system.md`, which takes precedence from then on.
 
-If cleanup fails or exceeds hyprwhspr's 5 second hook limit, the raw transcript is typed instead.
+If cleanup fails or exceeds hyprwhspr's 5 second hook limit, the raw transcript is typed instead. That limit is fixed in hyprwhspr, so on a typical provider cleanup covers dictations of up to two or three minutes.
 
 To enable cleanup, point hyprwhspr's hook at the plugin in `~/.config/hyprwhspr/config.json`:
 
@@ -81,6 +81,14 @@ Environment=CEREBRAS_API_KEY=...
 ```
 
 then `systemctl --user daemon-reload && systemctl --user restart hyprwhspr`.
+
+## Paste again
+
+`bin/paste-recent` re-pastes the last dictation, for when the first paste went to the wrong window. It refuses with a notification while a dictation is still being transcribed, so it never pastes the one before by mistake, and when nothing was dictated in the last five minutes. Bind it in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + V", "Paste last dictation", "~/.config/omarchy/plugins/thurstonsand.hyprwhspr/bin/paste-recent")
+```
 
 ## Files
 

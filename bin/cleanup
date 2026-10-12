@@ -26,8 +26,10 @@ WRAPPERS = [
 ]
 LOG_KEEP = 500
 RECENT_KEEP = 3
-# Output tokens or characters allowed per transcript character.
+# Output characters allowed per transcript character.
 OUTPUT_RATIO = 4
+# About 16k characters of output, past 15 minutes of speech; some proxies reject more.
+MAX_OUTPUT_TOKENS = 4096
 
 
 def peel(text: str) -> str:
@@ -111,7 +113,7 @@ def clean(transcript: str, cleanup: dict) -> str:
         terms = "\n".join(f"- {word}" for word in words)
         user += f"\n\n<DICTIONARY>\n{terms}\n</DICTIONARY>"
     # Reasoning tokens count against this budget too.
-    budget = OUTPUT_RATIO * len(transcript) + 1000
+    budget = MAX_OUTPUT_TOKENS
     effort = cleanup.get("effort")
 
     if provider["protocol"] == "responses":

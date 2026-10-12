@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Re-pastes the last dictation, refusing while one is still processing or when the last is stale.
+set -euo pipefail
+
+FRESH_SECONDS=300
+# Silent and broken recordings log no completion line, so a stop older than this is not in flight.
+PROCESSING_SECONDS=120
+
+notify() {
+  notify-send -a hyprwhspr -i audio-input-microphone "$1" "$2"
+}
+
+now="$(date +%s)"
+read -r stopped finished delivered < <(
+  journalctl --user -u hyprwhspr --since "-${FRESH_SECONDS}s" -o short-unix --no-pager |
+    awk '
+      / Recording stopped$/ { stopped = $1 }
+      /Injection dispatched/ { delivered = $1 }
+      /Injection dispatched|hook consumed|hallucination detected|No transcription generated|No text to inject|\[ERROR\]/ { finished = $1 }
+      END { printf "%d %d %d\n", stopped, finished, delivered }'
+)
+
+if ((stopped > finished && now - stopped < PROCESSING_SECONDS)); then
+  notify "Still transcribing" "The dictation will paste when it finishes."
+  exit 1
+fi
+if ((delivered == 0)); then
+  notify "No recent transcript" "Nothing was dictated in the last $((FRESH_SECONDS / 60)) minutes."
+  exit 1
+fi
+
+if ! output="$(hyprwhspr record paste-last 2>&1)"; then
+  notify "Paste failed" "$(tail -1 <<<"$output")"
+  exit 1
+fi
