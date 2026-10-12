@@ -100,7 +100,10 @@ Item {
       Button {
         id: trash
         anchors.right: parent.right
+        anchors.rightMargin: Style.spacing.controlPaddingX
         anchors.verticalCenter: parent.verticalCenter
+        horizontalPadding: Style.space(4)
+        verticalPadding: Style.space(2)
         visible: hover.containsMouse || hot
         iconText: "󰆴"
         foreground: page.panel.dim

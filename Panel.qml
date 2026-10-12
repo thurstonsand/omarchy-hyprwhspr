@@ -242,6 +242,7 @@ Panel {
 
   function gib(bytes) { return (bytes / 1073741824).toFixed(1) + " G" }
 
+
   function readStatus(text) {
     if (text.trim() === "") return
     status = JSON.parse(text)
@@ -272,6 +273,7 @@ Panel {
 
   IpcHandler {
     target: "hyprwhspr"
+
 
     function open(name: string): void {
       root.selectTab(name)
@@ -525,16 +527,14 @@ Panel {
             id: statusPage
             width: parent.width
             panel: root
-            opacity: root.tab === "status" ? 1 : 0
-            enabled: opacity === 1
+            visible: root.tab === "status"
           }
 
           ModelPage {
             id: modelPage
             width: parent.width
             panel: root
-            opacity: root.tab === "model" ? 1 : 0
-            enabled: opacity === 1
+            visible: root.tab === "model"
           }
 
           // Its list fills whatever height the other pages leave it.
@@ -543,16 +543,14 @@ Panel {
             width: parent.width
             height: parent.height
             panel: root
-            opacity: root.tab === "vocab" ? 1 : 0
-            enabled: opacity === 1
+            visible: root.tab === "vocab"
           }
 
           CleanupPage {
             id: cleanupPage
             width: parent.width
             panel: root
-            opacity: root.tab === "cleanup" ? 1 : 0
-            enabled: opacity === 1
+            visible: root.tab === "cleanup"
           }
         }
       }

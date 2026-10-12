@@ -258,7 +258,10 @@ Column {
             id: copy
             property bool copied: false
             anchors.right: parent.right
-            y: page.rowPadding + (time.height - height) / 2
+            anchors.rightMargin: page.rowPadding
+            y: Math.max(0, page.rowPadding + (time.height - height) / 2)
+            horizontalPadding: Style.space(4)
+            verticalPadding: Style.space(2)
             iconText: copied ? "󰄬" : "󰆏"
             foreground: copied ? page.panel.fg : page.panel.dim
             fontFamily: page.panel.fontFamily
